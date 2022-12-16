@@ -35,6 +35,7 @@ class Brain:
     def __init__(self, genome):
         self.genome = genome
         self.memory = {}
+        self.weighted_gene_sum = 0
         self.short_term_memory = 0
         
     def __iter__(self):
@@ -89,7 +90,7 @@ class Brain:
                 dy = chosen_food.y - position['y']
                 direction_food = math.atan2(dy, dx)
                 self.remember(chosen_food, chosen_food)
-            direction = direction_food if food_memory * 0.1 > random.random() else direction
+            direction = direction_food if food_memory * self.weighted_gene_sum > random.random() else direction
         return direction
 
     def avoid_poison(self, direction, poison_memory, position, radius):
@@ -98,7 +99,7 @@ class Brain:
             if self.is_surrounded_by_poison(poison, position, radius):
                 has_to_avoid_poison = True
                 break
-        if has_to_avoid_poison and (poison_memory * 0.1) > random.random():
+        if has_to_avoid_poison and (poison_memory * self.weighted_gene_sum) > random.random():
             for food in foods:
                 if food in self.memory: self.forget(self.memory[food])
             direction = self.seek_food(self.calculate_direction(self.genome), self.memory["food"], position)
@@ -108,12 +109,11 @@ class Brain:
         if "direction" in self.memory:
             direction = self.memory["direction"]
         else:
-            weighted_sum = 0
             for gene in genome.genes:
-                weighted_sum += gene / sum(genome.genes) * random.uniform(0, 2 * math.pi)
+                self.weighted_gene_sum += gene / sum(genome.genes) * random.uniform(0, 2 * math.pi)
             
-            dx = math.cos(weighted_sum)
-            dy = math.sin(weighted_sum)
+            dx = math.cos(self.weighted_gene_sum)
+            dy = math.sin(self.weighted_gene_sum)
             direction = math.atan2(dy, dx)
             self.remember("direction", direction)
         return direction
@@ -304,7 +304,6 @@ class Ball:
         self.check_mutation()
         self.draw(screen)
         self.checkMemory()
-        
 
 def main():
     pos = {"x": 100, "y": 100}
