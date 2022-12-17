@@ -3,7 +3,7 @@
 x and y: The x and y positions of the ball on the screen. <br>
 dx and dy: The x and y velocities of the ball. <br>
 radius: The radius of the ball. <br>
-color: The color of the ball. br>
+color: The color of the ball. <br>
 life: The remaining life of the ball. <br>
 food_eaten: The amount of food the ball has eaten. <br>
 poison_eaten: The amount of poison the ball has eaten. <br>
