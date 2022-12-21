@@ -102,7 +102,7 @@ class Brain:
         if has_to_avoid_poison and (poison_memory * self.weighted_gene_sum) > random.random():
             for food in foods:
                 if food in self.memory: self.forget(self.memory[food])
-            direction = self.seek_food(self.calculate_direction(self.genome), self.memory["food"], position)
+            direction = self.seek_food(self.calculate_direction(self.genome), self.memory["food"], position) if "food" in self.memory else self.calculate_direction(self.genome)
         return direction
 
     def calculate_direction(self, genome):
@@ -306,25 +306,26 @@ class Ball:
         self.checkMemory()
 
 def main():
-    pos = {"x": 100, "y": 100}
     last_print_time = 0
     ticks = 0
-    
-    for i in range(random.randint(10, 20)):
-        balls.append(Ball(pos["x"], pos["y"], i, 15, colors[1], [0.1, 0.1]))
-        pos["x"] += 40
         
-    for i in range(random.randint(10, 40)):
-        pos = {"x": random.randint(5, screen_width-10), "y": random.randint(5, screen_height-10)}
-        foods.append(Food(pos["x"], pos["y"],5,colors[1]))
+    def initializeSimulation():
+        pos = {"x": 100, "y": 100}
+        for i in range(random.randint(10, 20)):
+            balls.append(Ball(pos["x"], pos["y"], i, 15, colors[1], [0.1, 0.1]))
+            pos["x"] += 40
+        for i in range(random.randint(10, 40)):
+            pos = {"x": random.randint(5, screen_width-10), "y": random.randint(5, screen_height-10)}
+            foods.append(Food(pos["x"], pos["y"],5,colors[1]))
 
     running = True
     while running:
+        if len(balls) == 0: initializeSimulation()
         aliveBalls = [True for ball in balls]
         mouse_x, mouse_y = pygame.mouse.get_pos()
         screen.fill((0, 0, 0))
         ballsKilled = 0
-        ticks += 1
+        ticks += 1  
         
         if time.time() - last_print_time > 10:
             print(f"Number of alive balls: {len(aliveBalls)}")
@@ -352,7 +353,6 @@ def main():
         for poison in poisons:
             poison.draw(screen)
             
-        
         for i in range(len(aliveBalls)):
             if not aliveBalls[i]:
                 del balls[i-ballsKilled]
@@ -360,13 +360,7 @@ def main():
         
         for ball in balls:
             ball.check_reproduction()
-            
-        if len(aliveBalls) == 0:
-            pos = {"x": 100, "y": 100}
-            for i in range(random.randint(10, 20)):
-                balls.append(Ball(pos["x"], pos["y"], i, 15, colors[1], [0.1, 0.1]))
-                pos["x"] += 40
-                            
+                  
         pygame.display.update()
 
     pygame.quit()
