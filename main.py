@@ -1,3 +1,4 @@
+
 import pygame
 import math
 import random
@@ -16,13 +17,70 @@ REPRODUCTION_AND_MUTATION_INTERVAL = 10
 PRINT_INTERVAL = 10
 NUMBER_OF_GENES = 10
 FOOD_PROBABILITY = 0.0001
+OUTLINE_ENABLED = True
 
 colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+all_items = []
 balls = []
 foods = []
 poisons = []
-obstacles = []
-aliveBalls = []
+
+
+class Button:
+    """
+    Represents a clickable button with methods for drawing and interaction.
+    """
+    def __init__(self, x, y, width, height, color, text, font_size=30):
+        """
+        Initializes the Button object with specified parameters.
+
+        Parameters:
+        - x: x-coordinate of the button's top-left corner.
+        - y: y-coordinate of the button's top-left corner.
+        - width: Width of the button.
+        - height: Height of the button.
+        - color: Color of the button.
+        - text: Text to be displayed on the button.
+        - font_size: Font size of the text (default is 30).
+        """
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.color = color
+        self.text = text
+        self.font_size = font_size
+        self.font = pygame.font.Font(None, self.font_size)
+        self.clicked = False
+
+    def draw(self):
+        """
+        Draws the button on the screen.
+
+        Parameters:
+        - screen: Pygame screen surface.
+        """
+        global screen
+        pygame.draw.rect(screen, self.color, (self.x, self.y, self.width, self.height))
+        text_surface = self.font.render(self.text, True, (255, 255, 255))
+        text_rect = text_surface.get_rect(center=(self.x + self.width / 2, self.y + self.height / 2))
+        screen.blit(text_surface, text_rect)
+
+    def is_clicked(self, mouse_x, mouse_y):
+        """
+        Checks if the button is clicked.
+
+        Parameters:
+        - mouse_x: The x-coordinate of the mouse.
+        - mouse_y: The y-coordinate of the mouse.
+
+        Sets the 'clicked' attribute to True if the button is clicked.
+        """
+        if self.x < mouse_x < self.x + self.width and self.y < mouse_y < self.y + self.height:
+            self.clicked = True
+        else:
+            self.clicked = False
+        return self.clicked
 
 
 class Circle:
@@ -57,55 +115,6 @@ class Circle:
         """
         global screen
         pygame.draw.circle(screen, self.color, (self.x, self.y), self.radius)
-
-
-class CircleObstacle(Circle):
-    """
-    Represents a circular obstacle, inheriting from the Circle class.
-    """
-    def __init__(self, x, y, radius, color):
-        """
-        Initializes the CircleObstacle object with specified parameters.
-
-        Parameters:
-        - x: x-coordinate of the obstacle's center.
-        - y: y-coordinate of the obstacle's center.
-        - radius: radius of the obstacle.
-        - color: color of the obstacle.
-        """
-        super().__init__(x, y, radius, color)
-
-    def remove_items_within_obstacle(self):
-        """
-        Removes items (foods and poisons) within the obstacle's radius.
-        """
-        global foods, poisons
-        items_to_remove = []
-
-        for food in foods:
-            dx = self.x - food.x
-            dy = self.y - food.y
-            distance = math.sqrt(dx ** 2 + dy ** 2)
-
-            if distance < self.radius + food.radius:
-                items_to_remove.append(food)
-
-        for poison in poisons:
-            dx = self.x - poison.x
-            dy = self.y - poison.y
-            distance = math.sqrt(dx ** 2 + dy ** 2)
-
-            if distance < self.radius + poison.radius:
-                items_to_remove.append(poison)
-
-        for item in items_to_remove:
-            item.remove()
-
-    def draw(self):
-        """
-        Draws the circular obstacle on the screen.
-        """
-        super().draw()
 
 
 class Food(Circle):
@@ -293,27 +302,68 @@ class Brain:
         if item in self.memory:
             del self.memory[item]
 
-    def think(self, position, radius):
+    def think(self, position, radius, visibility):
         """
-        Makes a decision based on the current position and radius.
+        Makes a decision based on the current position, radius, and all available food and poison.
 
         Parameters:
         - position: Dictionary with 'x' and 'y' representing the current position.
         - radius: The radius of the AI.
+        - visibility: The visibility range of the AI.
 
         Returns:
         The direction to move in.
         """
+        global foods, poisons
+        visible_food = self.get_visible_items(position, visibility, foods)
+        visible_poison = self.get_visible_items(position, visibility, poisons)
         direction = self.calculate_direction(self.genome)
 
         if "food" in self.memory:
-            direction = self.seek_food(direction, self.memory["food"], position)
+            direction = self.seek_food(direction, self.memory["food"], position, visible_food)
         if "poison" in self.memory:
-            direction = self.avoid_poison(direction, self.memory["poison"], position, radius)
-        if any(obstacle in self.memory for obstacle in obstacles):
-            direction = self.avoid_obstacle(direction, position, radius)
+            direction = self.avoid_poison(direction, self.memory["poison"], position, radius, visible_poison)
+        if "position" in self.memory and "food" in self.memory: 
+            direction = self.overthink_position(direction, position, self.memory["position"])
+        else: self.remember("position", position)
 
         return direction
+    
+    def get_visible_items(self, position, visibility, all_items):
+        """
+        Returns a list of items within the visibility range of the AI.
+
+        Parameters:
+        - position: Dictionary with 'x' and 'y' representing the current position.
+        - visibility: The visibility range of the AI.
+        - all_items: List of all items.
+
+        Returns:
+        List of items within the visibility range.
+        """
+        visible_items = [item for item in all_items if self.calculate_distance(position, item) <= visibility]
+        return visible_items
+    
+    def calculate_distance(self, position1, position2):
+        """
+        Calculates the distance between two positions.
+
+        Parameters:
+        - position1: Dictionary with 'x' and 'y' representing the first position.
+        - position2: Dictionary with 'x' and 'y' representing the second position.
+
+        Returns:
+        The distance between the two positions.
+        """
+        if isinstance(position1, dict): x1, y1 = position1['x'], position1['y']
+        else: x1, y1 = position1.x, position1.y
+
+        if isinstance(position2, dict): x2, y2 = position2['x'], position2['y']
+        else: x2, y2 = position2.x, position2.y
+
+        dx = x1 - x2
+        dy = y1 - y2
+        return math.sqrt(dx ** 2 + dy ** 2)
     
     def calculate_direction(self, genome):
         """
@@ -338,7 +388,7 @@ class Brain:
             self.remember("direction", direction)
         return direction
     
-    def seek_food(self, direction, food_memory, position):
+    def seek_food(self, direction, food_memory, position, visible_food):
         """
         Adjusts the direction based on the memory of food.
 
@@ -346,12 +396,14 @@ class Brain:
         - direction: The current direction.
         - food_memory: The memory value for food.
         - position: Dictionary with 'x' and 'y' representing the current position.
+        - visible_food: List of food items within the visibility range.
 
         Returns:
         The adjusted direction.
         """
         global foods
         if len(foods) > 0:
+            
             memory = [False]
             for food in foods:
                 if food in self.memory:
@@ -360,16 +412,21 @@ class Brain:
             if memory[0]:
                 chosen_food = self.memory[memory[1]]
             else:
-                valid_foods = [food for food in foods if not self.is_food_near_poison(food, poisons)]
+                if not visible_food:
+                    return direction
+                
+                valid_foods = [food for food in visible_food if not self.is_food_near_poison(food, poisons)]
+
                 if not valid_foods:
                     return direction
-                probability = food_memory * 0.05 * self.weighted_gene_sum
-                if probability > random.random():
-                    chosen_food = min(foods, key=lambda food: math.dist((position['x'], position['y']), (food.x, food.y)))
+                
+                if food_memory * 0.05 * self.weighted_gene_sum > random.random():
+                    chosen_food = min(valid_foods, key=lambda food: math.dist((position['x'], position['y']), (food.x, food.y)))
                     self.remember(chosen_food, chosen_food)
                 else:
                     chosen_food = random.choice(valid_foods)
                     self.remember(chosen_food, chosen_food)
+
             dx = chosen_food.x - position['x']
             dy = chosen_food.y - position['y']
             direction_food = math.atan2(dy, dx)
@@ -393,7 +450,7 @@ class Brain:
                 return True
         return False
     
-    def avoid_poison(self, direction, poison_memory, position, radius):
+    def avoid_poison(self, direction, poison_memory, position, radius, visible_poison):
         """
         Adjusts the direction to avoid poison based on memory.
 
@@ -402,6 +459,7 @@ class Brain:
         - poison_memory: The memory value for poison.
         - position: Dictionary with 'x' and 'y' representing the current position.
         - radius: The radius of the AI.
+        - visible_poison: List of poison items within the visibility range.
 
         Returns:
         The adjusted direction.
@@ -452,68 +510,31 @@ class Brain:
         except Exception as e:
             print("Error calculating direction around poison:", e)
             return None
-    
-    def avoid_obstacle(self, direction, position, radius):
-        """
-        Adjusts the direction to avoid obstacle based on memory.
-
-        Parameters:
-        - direction: The current direction.
-        - obstacle_memory: The memory value for obstacle.
-        - position: Dictionary with 'x' and 'y' representing the current position.
-        - radius: The radius of the AI.
-
-        Returns:
-        The adjusted direction.
-        """
-        global obstacles
-        has_to_avoid_obstacle = [False]
-        for obstacle in obstacles:
-            if self.is_surrounded_by_obstacle(obstacle, position, radius) and obstacle in self.memory:
-                has_to_avoid_obstacle = [True, obstacle]
-                break
         
-        if has_to_avoid_obstacle[0]:
-            probability = self.memory[has_to_avoid_obstacle[1]] * 0.001 * self.weighted_gene_sum
-            if probability > random.random():
-                direction_around_obstacle = self.calculate_direction_around_obstacle(has_to_avoid_obstacle[1], position)
-                direction = direction_around_obstacle if direction_around_obstacle is not None else direction
-
+    def overthink_position(self, direction, position, last_position):
+        global foods
+        if len(foods) > 0:
+            
+            food_in_memory = None
+            for food in foods:
+                if food in self.memory:
+                    food_in_memory = food
+                    
+            if food_in_memory:
+                distance_to_last_position = self.calculate_distance(last_position, food_in_memory)
+                distance_to_current_position = self.calculate_distance(position, food_in_memory)
+                
+                if distance_to_last_position < distance_to_current_position:
+                    dx = food_in_memory.x - position['x']
+                    dy = food_in_memory.y - position['y']
+                    direction = math.atan2(dy, dx)
+                    
+                if distance_to_last_position == distance_to_current_position:
+                    self.forget(food_in_memory)
+                    direction = self.calculate_direction(self.genome)
+            
+        self.forget("position")
         return direction
-
-    def is_surrounded_by_obstacle(self, obstacle, position, radius):
-        """
-        Checks if the AI is surrounded by obstacle.
-
-        Parameters:
-        - obstacle: The Obstacle object.
-        - position: Dictionary with 'x' and 'y' representing the current position.
-        - radius: The radius of the AI.
-
-        Returns:
-        True if the AI is surrounded by obstacle, False otherwise.
-        """
-        distance_to_obstacle = math.sqrt((position['x'] - obstacle.x) ** 2 + (position['y'] - obstacle.y) ** 2)
-        return distance_to_obstacle < radius + obstacle.radius + 20
-
-    def calculate_direction_around_obstacle(self, obstacle, position):
-        """
-        Calculates a direction to move around the given obstacle.
-
-        Parameters:
-        - obstacle: The Obstacle object.
-        - position: Dictionary with 'x' and 'y' representing the current position.
-
-        Returns:
-        A new direction to move around the obstacle, or None if calculation fails.
-        """
-        try:
-            angle_to_obstacle = math.atan2(obstacle.y - position['y'], obstacle.x - position['x'])
-            new_direction = angle_to_obstacle + math.pi / 2
-            return new_direction
-        except Exception as e:
-            print("Error calculating direction around obstacle:", e)
-            return None
 
     def __str__(self):
         """
@@ -554,6 +575,7 @@ class Ball:
         self.last_print_time = 0
         self.last_reproduction_time = 0
         self.last_mutate_time = 0
+        self.visibility = 100
         self.brain = Brain(Genome())
 
     def learn(self, item):
@@ -589,16 +611,16 @@ class Ball:
         Simulates the aging process of the AI, affecting fitness and food saturation.
         """
         if self.foodSaturation > 0:
-            self.foodSaturation -= 0.01
+            self.foodSaturation -= 0.005
         else:
-            self.fitness = 0.01
+            self.fitness -= 0.005
         self.age += 1
 
     def move(self):
         """
         Moves the ball based on the AI's brain decision.
         """
-        self.direction = self.brain.think({'x': self.x, 'y': self.y}, self.radius)
+        self.direction = self.brain.think({'x': self.x, 'y': self.y}, self.radius, self.visibility)
         self.x += self.speed[0] * math.cos(self.direction)
         self.y += self.speed[1] * math.sin(self.direction)
 
@@ -632,8 +654,6 @@ class Ball:
                 self.handle_food_collision(other)
             elif isinstance(other, Poison):
                 self.handle_poison_collision(other)
-            elif isinstance(other, CircleObstacle):
-                self.handle_obstacle_collision(other)
 
     def handle_food_collision(self, food):
         """
@@ -660,19 +680,6 @@ class Ball:
         self.learn("poison")
         self.fitness = max(self.fitness - 20, 0)
         poison.remove()
-        
-    def handle_obstacle_collision(self, obstacle):
-        """
-        Handles collision with an obstacle object and updates AI state accordingly.
-
-        Parameters:
-        - obstacle: The obstacle object (CircleObstacle).
-        """
-        self.learn(obstacle)
-        self.x += self.speed[0] * -math.cos(self.direction)
-        self.y += self.speed[1] * -math.sin(self.direction)
-        self.speed[0] *= -1
-        self.speed[1] *= -1
         
     def update_color(self):
         """
@@ -706,6 +713,12 @@ class Ball:
         """
         pygame.draw.rect(screen, (255, 255, 0), (self.x - self.radius, self.y + self.radius + 5, 2 * self.radius, 5))
         pygame.draw.rect(screen, (0, 255, 0), (self.x - self.radius, self.y + self.radius + 5, (self.foodSaturation / 100) * 2 * self.radius, 5))
+        
+    def draw_visibility_outline(self):
+        """
+        Draws a Outline Circle to show how great the visibility of a ball is.
+        """
+        pygame.draw.circle(screen, (0, 255, 0), (self.x, self.y), self.radius + self.visibility, width=2)
 
     def check_mutation(self):
         """
@@ -835,8 +848,6 @@ class Ball:
             self.handle_collisions(food)
         for poison in poisons:
             self.handle_collisions(poison)
-        for obstacle in obstacles:
-            self.handle_collisions(obstacle)
         self.move()
         self.bounce(screen_width, screen_height)
         self.aging()
@@ -847,32 +858,30 @@ class Ball:
         self.draw_health_bar()
         self.draw_hunger_bar()
         self.checkMemory()
-
+        
+        if OUTLINE_ENABLED:
+            self.draw_visibility_outline()
 
 def initializeSimulation():
     """
-    Initializes the simulation by adding balls, food, and obstacles.
+    Initializes the simulation by adding balls and food.
     """
-    for i in range(random.randint(1, 1)):
+    for i in range(random.randint(1, 5)):
         pos = {"x": 100, "y": 100}
         balls.append(Ball(random.randint(pos["x"], screen_width - 10), pos["y"], i, 15, colors[1], [0.1, 0.1]))
         pos["x"] += 40
-        
-    for i in range(random.randint(1, 4)):
-        pos = {"x": random.randint(100, screen_width - 100), "y": random.randint(100, screen_height - 100)}
-        obstacles.append(CircleObstacle(pos["x"], pos["y"], random.randint(20, 30), colors[2]))
         
     for i in range(random.randint(10, 60)):
         pos = {"x": random.randint(5, screen_width - 10), "y": random.randint(5, screen_height - 10)}
         foods.append(Food(pos["x"], pos["y"], 5, colors[1]))
 
-
 def main():
     """
     The main function that controls the Pygame simulation.
     """
-    global balls, obstacles, foods, poisons
+    global balls, foods, poisons, OUTLINE_ENABLED
     last_print_time = 0
+    button = Button(0, 0, 200, 50, (0, 255, 0), "Toggle Outline")
     ticks = 0
 
     running = True
@@ -882,6 +891,7 @@ def main():
         mouse_x, mouse_y = pygame.mouse.get_pos()
         screen.fill((0, 0, 0))
         ballsKilled = 0
+        button.draw()
         ticks += 1
 
         if time.time() - last_print_time > 10:
@@ -899,8 +909,9 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                obstacles.append(CircleObstacle(mouse_x, mouse_y, random.randint(20, 30), colors[2]))
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if button.is_clicked(mouse_x, mouse_y):
+                    OUTLINE_ENABLED = not OUTLINE_ENABLED
 
         for i in range(len(balls)):
             balls[i].update(mouse_x, mouse_y)
@@ -911,10 +922,6 @@ def main():
 
         for poison in poisons:
             poison.draw()
-            
-        for obstacle in obstacles:
-            obstacle.remove_items_within_obstacle()
-            obstacle.draw()
            
 
         for i in range(len(aliveBalls)):
